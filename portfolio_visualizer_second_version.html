@@ -1,0 +1,877 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Portfolio Risk & Return Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg:#0b0e14; --surface:#12161f; --surface2:#1a1f2e; --border:#252b3b;
+  --accent:#c8f542; --accent2:#4a9eff; --red:#ff4d4d; --red-dim:#3d1a1a;
+  --red-border:#7a2020; --gold:#f0a742; --text:#e8eaf0; --muted:#6b7280;
+}
+body { background:var(--bg); color:var(--text); font-family:'DM Mono',monospace; min-height:100vh; overflow-x:hidden; }
+body::before {
+  content:''; position:fixed; inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.04'/%3E%3C/svg%3E");
+  pointer-events:none; z-index:999; opacity:0.4;
+}
+
+/* ── HEADER ── */
+header {
+  padding:1.5rem 2.5rem; border-bottom:1px solid var(--border);
+  display:flex; align-items:flex-end; justify-content:space-between; gap:2rem;
+}
+.logo-block h1 { font-family:'DM Serif Display',serif; font-size:clamp(1.6rem,2.8vw,2.4rem); font-style:italic; line-height:1; letter-spacing:-0.02em; color:var(--accent); }
+.logo-block p { font-size:0.6rem; color:var(--muted); letter-spacing:0.18em; text-transform:uppercase; margin-top:0.25rem; }
+.header-badge { background:var(--surface); border:1px solid var(--border); border-radius:4px; padding:0.3rem 0.75rem; font-size:0.58rem; color:var(--muted); letter-spacing:0.1em; text-transform:uppercase; white-space:nowrap; }
+
+/* ── MAIN LAYOUT ── */
+.main-grid { display:grid; grid-template-columns:355px 1fr; min-height:calc(100vh - 90px); }
+
+/* ── SIDEBAR ── */
+.sidebar { border-right:1px solid var(--border); padding:1.4rem 1.4rem; display:flex; flex-direction:column; gap:1.3rem; overflow-y:auto; max-height:calc(100vh - 90px); }
+.section-label { font-size:0.55rem; letter-spacing:0.2em; text-transform:uppercase; color:var(--muted); margin-bottom:0.75rem; display:flex; align-items:center; gap:0.6rem; }
+.section-label::after { content:''; flex:1; height:1px; background:var(--border); }
+
+/* search */
+.search-wrap { position:relative; }
+.search-wrap input { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'DM Mono',monospace; font-size:0.74rem; padding:0.5rem 0.7rem 0.5rem 1.9rem; outline:none; transition:border-color 0.2s; }
+.search-wrap input::placeholder { color:var(--muted); }
+.search-wrap input:focus { border-color:var(--accent); }
+.search-icon { position:absolute; left:0.6rem; top:50%; transform:translateY(-52%); color:var(--muted); font-size:0.82rem; pointer-events:none; user-select:none; }
+.search-dropdown { position:absolute; top:calc(100% + 4px); left:0; right:0; background:var(--surface2); border:1px solid var(--border); border-radius:4px; z-index:200; max-height:210px; overflow-y:auto; display:none; box-shadow:0 8px 32px rgba(0,0,0,0.6); }
+.search-dropdown.open { display:block; }
+.dropdown-item { padding:0.45rem 0.7rem; cursor:pointer; display:flex; align-items:center; gap:0.5rem; border-bottom:1px solid var(--border); transition:background 0.1s; }
+.dropdown-item:last-child { border-bottom:none; }
+.dropdown-item:hover { background:rgba(200,245,66,0.04); }
+.dropdown-item.already-added { opacity:0.38; pointer-events:none; }
+.di-ticker { font-size:0.72rem; font-weight:500; color:var(--accent); min-width:44px; }
+.di-name   { font-size:0.6rem; color:var(--muted); flex:1; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.di-mu     { font-size:0.6rem; color:var(--text); min-width:34px; text-align:right; }
+
+/* etf rows */
+.portfolio-list { display:flex; flex-direction:column; gap:0.55rem; }
+.etf-row { background:var(--surface); border:1px solid var(--border); border-radius:5px; padding:0.6rem 0.8rem; }
+.etf-row-top { display:flex; align-items:center; gap:0.5rem; margin-bottom:0.4rem; }
+.etf-color-swatch { width:3px; height:30px; border-radius:2px; flex-shrink:0; }
+.etf-info { flex:1; min-width:0; }
+.etf-ticker { font-size:0.74rem; font-weight:500; }
+.etf-cat-text { font-size:0.57rem; color:var(--muted); }
+.etf-pct-wrap { display:flex; align-items:center; gap:0.22rem; }
+.etf-pct-input { width:50px; text-align:right; background:var(--surface2); border:1px solid var(--border); border-radius:3px; color:var(--text); font-family:'DM Mono',monospace; font-size:0.74rem; padding:0.16rem 0.32rem; outline:none; transition:border-color 0.15s; }
+.etf-pct-input:focus { border-color:var(--accent); }
+.etf-pct-sym { font-size:0.65rem; color:var(--muted); }
+.etf-remove { background:none; border:none; color:var(--muted); cursor:pointer; font-size:0.76rem; padding:0.1rem 0.2rem; line-height:1; transition:color 0.12s; margin-left:0.1rem; }
+.etf-remove:hover { color:var(--red); }
+.etf-slider { -webkit-appearance:none; width:100%; height:2px; border-radius:1px; outline:none; cursor:pointer; display:block; }
+.etf-slider::-webkit-slider-thumb { -webkit-appearance:none; width:12px; height:12px; border-radius:50%; cursor:pointer; border:2px solid var(--bg); transition:transform 0.12s; }
+.etf-slider::-webkit-slider-thumb:hover { transform:scale(1.35); }
+
+/* alloc bar */
+.alloc-wrap { margin-top:0.15rem; }
+.alloc-stack { height:4px; border-radius:2px; overflow:hidden; display:flex; margin-bottom:0.28rem; }
+.alloc-stack-seg { height:100%; transition:flex 0.3s ease; }
+.alloc-total-bar { height:3px; border-radius:2px; background:var(--border); overflow:hidden; margin-bottom:0.25rem; }
+.alloc-total-fill { height:100%; border-radius:2px; transition:width 0.3s, background 0.3s; }
+.alloc-total-row { display:flex; justify-content:space-between; font-size:0.58rem; }
+.alloc-total-row .lbl { color:var(--muted); }
+.alloc-total-row .val { font-weight:500; }
+.val.ok { color:var(--accent); } .val.over { color:var(--red); } .val.under { color:var(--gold); }
+.warn-banner { display:none; align-items:center; gap:0.5rem; background:rgba(255,77,77,0.08); border:1px solid rgba(255,77,77,0.25); border-radius:4px; padding:0.4rem 0.65rem; font-size:0.62rem; color:var(--red); margin-bottom:0.35rem; }
+.warn-banner.visible { display:flex; }
+
+/* settings */
+.settings-grid { display:grid; grid-template-columns:1fr 1fr; gap:0.65rem; }
+.sg label { font-size:0.56rem; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; display:block; margin-bottom:0.28rem; }
+.sg input[type="number"] { width:100%; background:var(--surface2); border:1px solid var(--border); border-radius:4px; color:var(--text); font-family:'DM Mono',monospace; font-size:0.76rem; padding:0.42rem 0.55rem; outline:none; transition:border-color 0.2s; }
+.sg input[type="number"]:focus { border-color:var(--accent); }
+.years-row { display:flex; flex-direction:column; gap:0.38rem; }
+.yr-label { font-size:0.56rem; color:var(--muted); letter-spacing:0.08em; text-transform:uppercase; display:flex; justify-content:space-between; }
+.yr-label span { color:var(--text); font-size:0.76rem; letter-spacing:0; text-transform:none; }
+input#years-range { -webkit-appearance:none; width:100%; height:2px; background:var(--border); border-radius:1px; outline:none; cursor:pointer; }
+input#years-range::-webkit-slider-thumb { -webkit-appearance:none; width:13px; height:13px; border-radius:50%; background:var(--accent); border:2px solid var(--bg); box-shadow:0 0 8px rgba(200,245,66,0.4); transition:transform 0.12s; }
+input#years-range::-webkit-slider-thumb:hover { transform:scale(1.3); }
+
+/* stats */
+.stats-row { display:grid; grid-template-columns:1fr 1fr; gap:1px; background:var(--border); border-radius:4px; overflow:hidden; }
+.stat-card { background:var(--surface); padding:0.75rem; }
+.stat-label { font-size:0.53rem; letter-spacing:0.12em; text-transform:uppercase; color:var(--muted); margin-bottom:0.18rem; }
+.stat-value { font-family:'DM Serif Display',serif; font-size:1.3rem; line-height:1; }
+.stat-value.positive { color:var(--accent); }
+.stat-value.negative { color:var(--red); }
+.stat-value.neutral  { color:var(--text); }
+.stat-sub { font-size:0.55rem; color:var(--muted); margin-top:0.1rem; }
+
+/* ── CHART AREA ── */
+.chart-area { padding:1.5rem 1.8rem 1.2rem; display:flex; flex-direction:column; gap:1.1rem; overflow-y:auto; max-height:calc(100vh - 90px); }
+.chart-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:0.7rem; }
+.chart-title { font-family:'DM Serif Display',serif; font-size:1.1rem; font-style:italic; color:var(--text); }
+.legend { display:flex; flex-wrap:wrap; gap:0.7rem; }
+.legend-item { display:flex; align-items:center; gap:0.32rem; font-size:0.6rem; color:var(--muted); }
+.legend-dot { width:7px; height:7px; border-radius:50%; }
+
+/* ── RISK CALLOUT BANNER ── */
+.risk-callout {
+  background:var(--red-dim); border:1px solid var(--red-border); border-radius:6px;
+  padding:1rem 1.3rem; display:grid; grid-template-columns:1fr 1px 1fr 1px 1fr; gap:0; align-items:center;
+}
+.risk-callout-divider { background:var(--red-border); height:100%; }
+.risk-stat { padding:0 1.1rem; text-align:center; }
+.risk-stat:first-child { padding-left:0; }
+.risk-stat:last-child  { padding-right:0; }
+.risk-stat-label { font-size:0.55rem; letter-spacing:0.15em; text-transform:uppercase; color:#e07070; margin-bottom:0.22rem; }
+.risk-stat-value { font-family:'DM Serif Display',serif; font-size:1.65rem; line-height:1; color:var(--red); }
+.risk-stat-sub   { font-size:0.58rem; color:#c05050; margin-top:0.12rem; }
+.risk-stat-value.gold { color:var(--gold); }
+.risk-stat-label.gold { color:#c09030; }
+.risk-stat-sub.gold   { color:#a07828; }
+.risk-callout-icon { font-size:1.4rem; margin-bottom:0.15rem; }
+
+/* ── CHARTS GRID ── */
+.charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:1rem; }
+.chart-card { background:var(--surface); border:1px solid var(--border); border-radius:6px; padding:1rem; position:relative; }
+.chart-card.full-width { grid-column:1 / -1; }
+.chart-card-title { font-size:0.56rem; letter-spacing:0.15em; text-transform:uppercase; color:var(--muted); margin-bottom:0.65rem; display:flex; justify-content:space-between; align-items:center; }
+.chart-card canvas { width:100% !important; }
+.loading-overlay { position:absolute; inset:0; background:rgba(11,14,20,0.72); border-radius:6px; display:flex; align-items:center; justify-content:center; opacity:0; pointer-events:none; transition:opacity 0.18s; }
+.loading-overlay.active { opacity:1; pointer-events:all; }
+.spinner { width:20px; height:20px; border:2px solid var(--border); border-top-color:var(--accent); border-radius:50%; animation:spin 0.65s linear infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* ── RANGE OF RETURNS CHART ── */
+.range-chart-wrap { position:relative; overflow:hidden; }
+.range-y-axis { position:absolute; left:0; top:0; bottom:24px; width:36px; display:flex; flex-direction:column; justify-content:space-between; }
+.range-y-tick { font-size:0.55rem; color:var(--muted); text-align:right; }
+.range-bars-scroll { margin-left:36px; overflow-x:auto; }
+.range-bars { display:flex; align-items:flex-end; gap:0; position:relative; padding-bottom:24px; }
+.range-bar-col { display:flex; flex-direction:column; align-items:center; flex:1; min-width:62px; position:relative; cursor:default; }
+.range-bar-col:hover .rbc-inner { opacity:0.85; }
+.range-bar-col.current-col .rbc-inner { outline:2px solid var(--accent); outline-offset:2px; border-radius:3px; }
+.rbc-inner { width:100%; display:flex; flex-direction:column; align-items:center; transition:opacity 0.15s; }
+.rbc-gain  { background:#1ea887; border-radius:3px 3px 0 0; width:65%; display:flex; align-items:flex-start; justify-content:center; min-height:4px; }
+.rbc-gain  span { font-size:0.58rem; color:#fff; padding:2px 0; font-weight:500; }
+.rbc-avg   { width:8px; height:8px; border-radius:50%; background:var(--muted); border:1.5px solid var(--bg); margin:1px auto; flex-shrink:0; }
+.rbc-spacer { height:2px; width:65%; }
+.rbc-loss  { background:var(--gold); border-radius:0 0 3px 3px; width:65%; display:flex; align-items:flex-end; justify-content:center; min-height:4px; }
+.rbc-loss  span { font-size:0.58rem; color:#1a1000; padding:2px 0; font-weight:500; }
+.rbc-label { font-size:0.56rem; color:var(--muted); text-align:center; margin-top:5px; line-height:1.3; white-space:nowrap; }
+
+/* zero line */
+.range-zero-line { position:absolute; left:36px; right:0; height:1px; background:rgba(255,255,255,0.12); pointer-events:none; }
+
+/* ── WORST YEAR TIMELINE ── */
+.worst-timeline { display:flex; flex-direction:column; gap:0.4rem; }
+.wt-row { display:flex; align-items:center; gap:0.6rem; }
+.wt-year { font-size:0.62rem; color:var(--muted); min-width:38px; }
+.wt-bar-wrap { flex:1; position:relative; height:20px; background:var(--surface2); border-radius:2px; overflow:hidden; }
+.wt-bar { height:100%; border-radius:2px; background:var(--red); display:flex; align-items:center; padding-left:6px; transition:width 0.6s ease; }
+.wt-bar-pct { font-size:0.6rem; color:#fff; white-space:nowrap; }
+.wt-dollar { font-size:0.62rem; color:var(--red); min-width:70px; text-align:right; }
+
+/* ── RISK TOLERANCE GAUGE ── */
+.risk-gauge-wrap { text-align:center; }
+.gauge-svg { overflow:visible; }
+.gauge-needle { transform-origin:50% 100%; transition:transform 0.8s cubic-bezier(0.34,1.56,0.64,1); }
+.gauge-labels { display:flex; justify-content:space-between; font-size:0.55rem; color:var(--muted); margin-top:0.4rem; padding:0 0.3rem; }
+.risk-label { font-size:0.8rem; font-family:'DM Serif Display',serif; font-style:italic; margin-top:0.3rem; }
+
+.disclaimer { border-top:1px solid var(--border); padding:0.75rem 1.8rem; font-size:0.55rem; color:var(--muted); letter-spacing:0.03em; line-height:1.7; }
+
+@media (max-width:980px) {
+  .main-grid { grid-template-columns:1fr; }
+  .sidebar { border-right:none; border-bottom:1px solid var(--border); max-height:none; }
+  .chart-area { max-height:none; }
+  .charts-grid { grid-template-columns:1fr; }
+  .chart-card.full-width { grid-column:1; }
+  .risk-callout { grid-template-columns:1fr; gap:0.8rem; }
+  .risk-callout-divider { display:none; }
+}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo-block">
+    <h1>Portfolio</h1>
+    <p>Risk & Return Visualizer · Custom ETF Builder</p>
+  </div>
+  <div class="header-badge">Simulated · Not Financial Advice</div>
+</header>
+
+<div class="main-grid">
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar">
+
+  <div>
+    <div class="section-label">Portfolio Builder</div>
+    <div class="search-wrap">
+      <span class="search-icon">⌕</span>
+      <input type="text" id="etf-search" placeholder="Search ticker or name (e.g. SPY, bonds…)" autocomplete="off" spellcheck="false">
+      <div class="search-dropdown" id="search-dropdown"></div>
+    </div>
+  </div>
+
+  <div>
+    <div id="warn-banner" class="warn-banner">⚠ Allocations must total exactly 100%</div>
+    <div id="portfolio-list" class="portfolio-list"></div>
+    <div class="alloc-wrap" style="margin-top:0.7rem">
+      <div class="alloc-stack" id="alloc-stack"></div>
+      <div class="alloc-total-bar"><div class="alloc-total-fill" id="alloc-fill"></div></div>
+      <div class="alloc-total-row">
+        <span class="lbl">Total Allocation</span>
+        <span class="val" id="alloc-total-val">100%</span>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="section-label">Settings</div>
+    <div style="display:flex;flex-direction:column;gap:0.9rem">
+      <div class="years-row">
+        <div class="yr-label">Investment Period <span id="years-label">10 years</span></div>
+        <input type="range" id="years-range" min="1" max="30" value="10">
+      </div>
+      <div class="settings-grid">
+        <div class="sg"><label>Initial ($)</label><input type="number" id="initial-amount" value="100000" min="0" step="5000"></div>
+        <div class="sg"><label>Monthly ($)</label><input type="number" id="monthly-amount" value="1000" min="0" step="100"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-row">
+    <div class="stat-card">
+      <div class="stat-label">Avg Annual Return</div>
+      <div class="stat-value positive" id="stat-return">—</div>
+      <div class="stat-sub">blended CAGR</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Annual Volatility</div>
+      <div class="stat-value neutral" id="stat-vol">—</div>
+      <div class="stat-sub">std deviation</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Final (Median)</div>
+      <div class="stat-value positive" id="stat-final">—</div>
+      <div class="stat-sub">50th percentile</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Sharpe Ratio</div>
+      <div class="stat-value neutral" id="stat-sharpe">—</div>
+      <div class="stat-sub">vs 4.5% risk-free</div>
+    </div>
+  </div>
+
+</aside>
+
+<!-- ══ CHART AREA ══ -->
+<main class="chart-area">
+
+  <div class="chart-header">
+    <div class="chart-title" id="chart-title">Portfolio Risk & Return Simulation</div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <!-- RISK CALLOUT BANNER -->
+  <div class="risk-callout" id="risk-callout">
+    <div class="risk-stat">
+      <div class="risk-callout-icon">📉</div>
+      <div class="risk-stat-label">Worst Single Year Loss</div>
+      <div class="risk-stat-value" id="rc-worst-pct">—</div>
+      <div class="risk-stat-sub" id="rc-worst-dollar">In dollar terms</div>
+    </div>
+    <div class="risk-callout-divider"></div>
+    <div class="risk-stat">
+      <div class="risk-callout-icon">⏱</div>
+      <div class="risk-stat-label">Max Drawdown (Simulated)</div>
+      <div class="risk-stat-value" id="rc-drawdown">—</div>
+      <div class="risk-stat-sub" id="rc-drawdown-dollar">Peak-to-trough loss</div>
+    </div>
+    <div class="risk-callout-divider"></div>
+    <div class="risk-stat">
+      <div class="risk-callout-icon">📅</div>
+      <div class="risk-stat-label gold">Best Single Year Gain</div>
+      <div class="risk-stat-value gold" id="rc-best-pct">—</div>
+      <div class="risk-stat-sub gold" id="rc-best-dollar">In dollar terms</div>
+    </div>
+  </div>
+
+  <!-- RANGE OF RETURNS CHART (Vanguard-style) -->
+  <div class="chart-card full-width">
+    <div class="chart-card-title">
+      <span>Range of Calendar-Year Returns · Simulated (1926–2024 methodology)</span>
+      <span style="color:var(--accent);font-size:0.55rem" id="range-subtitle"></span>
+    </div>
+    <div class="range-chart-wrap" id="range-chart-wrap" style="height:230px">
+      <div class="range-y-axis" id="range-y-axis"></div>
+      <div class="range-zero-line" id="range-zero-line"></div>
+      <div class="range-bars-scroll"><div class="range-bars" id="range-bars"></div></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:0.5rem;padding:0 36px;font-size:0.55rem;color:var(--muted)">
+      <span>← Less Risk</span>
+      <div style="display:flex;gap:1.2rem;align-items:center">
+        <span style="display:flex;align-items:center;gap:0.3rem"><span style="display:inline-block;width:10px;height:10px;background:#1ea887;border-radius:2px"></span>Best year gain</span>
+        <span style="display:flex;align-items:center;gap:0.3rem"><span style="display:inline-block;width:8px;height:8px;background:var(--muted);border-radius:50%"></span>Avg return</span>
+        <span style="display:flex;align-items:center;gap:0.3rem"><span style="display:inline-block;width:10px;height:10px;background:var(--gold);border-radius:2px"></span>Worst year loss</span>
+      </div>
+      <span>More Risk →</span>
+    </div>
+  </div>
+
+  <!-- BOTTOM CHARTS -->
+  <div class="charts-grid">
+
+    <!-- WORST YEARS TIMELINE -->
+    <div class="chart-card" style="height:auto">
+      <div class="chart-card-title">
+        <span>🔴 Simulated Bad Years — % Loss & Dollar Impact</span>
+      </div>
+      <div id="worst-timeline" class="worst-timeline"></div>
+      <div style="margin-top:0.7rem;font-size:0.56rem;color:var(--muted)">Based on starting portfolio value of <span id="wt-initial-note" style="color:var(--text)">$100,000</span></div>
+    </div>
+
+    <!-- RISK GAUGE + GROWTH CHART -->
+    <div style="display:flex;flex-direction:column;gap:1rem">
+
+      <!-- RISK TOLERANCE GAUGE -->
+      <div class="chart-card">
+        <div class="chart-card-title"><span>Risk Tolerance Assessment</span></div>
+        <div class="risk-gauge-wrap">
+          <svg class="gauge-svg" viewBox="0 0 200 110" width="100%" style="max-height:110px">
+            <defs>
+              <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%"   stop-color="#1ea887"/>
+                <stop offset="40%"  stop-color="#f0a742"/>
+                <stop offset="75%"  stop-color="#ff6b2b"/>
+                <stop offset="100%" stop-color="#ff2020"/>
+              </linearGradient>
+            </defs>
+            <!-- Arc track -->
+            <path d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="#252b3b" stroke-width="14" stroke-linecap="round"/>
+            <path id="gauge-arc" d="M 15 100 A 85 85 0 0 1 185 100" fill="none" stroke="url(#gaugeGrad)" stroke-width="14" stroke-linecap="round" stroke-dasharray="266.9" stroke-dashoffset="266.9"/>
+            <!-- Tick marks -->
+            <g id="gauge-ticks"></g>
+            <!-- Needle -->
+            <g class="gauge-needle" id="gauge-needle">
+              <line x1="100" y1="100" x2="100" y2="28" stroke="var(--text)" stroke-width="2" stroke-linecap="round"/>
+              <circle cx="100" cy="100" r="5" fill="var(--text)"/>
+              <circle cx="100" cy="100" r="2.5" fill="var(--bg)"/>
+            </g>
+          </svg>
+          <div class="gauge-labels">
+            <span>Conservative</span><span>Moderate</span><span>Aggressive</span>
+          </div>
+          <div class="risk-label" id="risk-label" style="color:var(--gold)">—</div>
+          <div style="font-size:0.58rem;color:var(--muted);margin-top:0.2rem" id="risk-sublabel">based on portfolio volatility</div>
+        </div>
+      </div>
+
+      <!-- GROWTH CHART -->
+      <div class="chart-card" style="height:190px">
+        <div class="chart-card-title"><span>Monte Carlo Growth · P10 / Median / P90</span></div>
+        <canvas id="growth-chart"></canvas>
+        <div class="loading-overlay" id="loading-growth"><div class="spinner"></div></div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="disclaimer">
+    ⚠ Historical data approximations. VT ≈ 8.5% µ / 15% σ · BND ≈ 3.5% µ / 4.5% σ. Correlations estimated by asset class. Monte Carlo uses Cholesky-decomposed correlated Gaussian sampling (monthly steps, 200 paths).
+    Worst-year and max-drawdown figures are simulation percentiles — actual losses may differ. Not financial advice.
+  </div>
+
+</main>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════
+//  ETF DATABASE
+// ══════════════════════════════════════════════════
+const ETF_DB = {
+  VT:   {name:'Vanguard Total World Stock',       cat:'Global Equity',      mu:0.085,sig:0.150},
+  VTI:  {name:'Vanguard Total Stock Market',      cat:'US Equity',          mu:0.093,sig:0.152},
+  SPY:  {name:'SPDR S&P 500 ETF',                 cat:'US Large Cap',       mu:0.094,sig:0.150},
+  IVV:  {name:'iShares Core S&P 500',             cat:'US Large Cap',       mu:0.094,sig:0.150},
+  VOO:  {name:'Vanguard S&P 500 ETF',             cat:'US Large Cap',       mu:0.094,sig:0.149},
+  QQQ:  {name:'Invesco NASDAQ-100',               cat:'US Tech / Growth',   mu:0.112,sig:0.210},
+  IWM:  {name:'iShares Russell 2000',             cat:'US Small Cap',       mu:0.088,sig:0.195},
+  VB:   {name:'Vanguard Small-Cap ETF',           cat:'US Small Cap',       mu:0.090,sig:0.190},
+  VXUS: {name:'Vanguard Total Intl Stock',        cat:'Intl Equity',        mu:0.072,sig:0.160},
+  EFA:  {name:'iShares MSCI EAFE',                cat:'Developed Intl',     mu:0.068,sig:0.158},
+  VEA:  {name:'Vanguard FTSE Developed Mkts',     cat:'Developed Intl',     mu:0.070,sig:0.155},
+  EEM:  {name:'iShares MSCI Emerging Markets',    cat:'Emerging Markets',   mu:0.078,sig:0.220},
+  VWO:  {name:'Vanguard FTSE Emerging Markets',   cat:'Emerging Markets',   mu:0.077,sig:0.218},
+  BND:  {name:'Vanguard Total Bond Market',       cat:'US Bonds',           mu:0.035,sig:0.045},
+  AGG:  {name:'iShares US Aggregate Bond',        cat:'US Bonds',           mu:0.034,sig:0.044},
+  TLT:  {name:'iShares 20+ Year Treasury',        cat:'Long-Term Bonds',    mu:0.040,sig:0.130},
+  IEF:  {name:'iShares 7-10 Year Treasury',       cat:'Intermediate Bonds', mu:0.033,sig:0.070},
+  SHY:  {name:'iShares 1-3 Year Treasury',        cat:'Short-Term Bonds',   mu:0.025,sig:0.018},
+  LQD:  {name:'iShares Investment Grade Corp',    cat:'Corp Bonds',         mu:0.042,sig:0.070},
+  HYG:  {name:'iShares High Yield Corp Bond',     cat:'High Yield Bonds',   mu:0.055,sig:0.105},
+  JNK:  {name:'SPDR High Yield Bond',             cat:'High Yield Bonds',   mu:0.054,sig:0.108},
+  BNDX: {name:'Vanguard Total Intl Bond',         cat:'Intl Bonds',         mu:0.028,sig:0.055},
+  GLD:  {name:'SPDR Gold Shares',                 cat:'Gold',               mu:0.055,sig:0.160},
+  IAU:  {name:'iShares Gold Trust',               cat:'Gold',               mu:0.055,sig:0.159},
+  VNQ:  {name:'Vanguard Real Estate (REIT)',       cat:'Real Estate',        mu:0.080,sig:0.185},
+  SCHH: {name:'Schwab US REIT ETF',               cat:'Real Estate',        mu:0.079,sig:0.183},
+  XLE:  {name:'Energy Select Sector SPDR',        cat:'Energy',             mu:0.072,sig:0.250},
+  XLK:  {name:'Technology Select Sector SPDR',    cat:'Technology',         mu:0.115,sig:0.215},
+  XLV:  {name:'Health Care Select Sector SPDR',   cat:'Healthcare',         mu:0.088,sig:0.135},
+  XLF:  {name:'Financial Select Sector SPDR',     cat:'Financials',         mu:0.082,sig:0.200},
+  VIG:  {name:'Vanguard Dividend Appreciation',   cat:'Dividend Growth',    mu:0.090,sig:0.130},
+  SCHD: {name:'Schwab US Dividend Equity',        cat:'Dividend',           mu:0.092,sig:0.128},
+  VYM:  {name:'Vanguard High Dividend Yield',     cat:'Dividend',           mu:0.087,sig:0.135},
+  ARKK: {name:'ARK Innovation ETF',               cat:'Innovation',         mu:0.060,sig:0.520},
+  MTUM: {name:'iShares MSCI USA Momentum',        cat:'Momentum Factor',    mu:0.098,sig:0.175},
+  VGSH: {name:'Vanguard Short-Term Treasury',     cat:'Short-Term Bonds',   mu:0.025,sig:0.018},
+};
+
+function assetClass(t) {
+  const c = ETF_DB[t]?.cat ?? '';
+  if (c.includes('Bond')||c.includes('Treasury')) return 'bond';
+  if (c==='Gold') return 'gold';
+  if (c==='Real Estate') return 'reit';
+  return 'equity';
+}
+function getCorr(t1,t2) {
+  if (t1===t2) return 1.0;
+  const key=[assetClass(t1),assetClass(t2)].sort().join('-');
+  return {'bond-bond':0.72,'equity-equity':0.75,'bond-equity':-0.10,'gold-gold':1,'bond-gold':0.05,'equity-gold':0.02,'equity-reit':0.60,'bond-reit':0.10,'gold-reit':0.05,'reit-reit':0.85}[key]??0.30;
+}
+
+const PALETTE=['#c8f542','#4a9eff','#ff6b6b','#a78bfa','#fb923c','#34d399','#f472b6','#fbbf24','#60a5fa','#22d3ee','#a3e635'];
+const colorFor=i=>PALETTE[i%PALETTE.length];
+
+let portfolio=[{ticker:'VT',pct:70},{ticker:'BND',pct:30}];
+let years=10, simTimer=null, charts={};
+const NUM_PATHS=200, RISK_FREE=0.045;
+
+// ══════════════════════════════════════════════════
+//  PORTFOLIO LIST
+// ══════════════════════════════════════════════════
+function renderPortfolioList() {
+  document.querySelectorAll('style[data-etf-style]').forEach(s=>s.remove());
+  const list=document.getElementById('portfolio-list');
+  list.innerHTML='';
+  portfolio.forEach((item,i)=>{
+    const etf=ETF_DB[item.ticker]??{name:item.ticker,cat:'Custom',mu:0.08,sig:0.15};
+    const color=colorFor(i);
+    const st=document.createElement('style');
+    st.dataset.etfStyle=i;
+    st.textContent=`.etf-slider[data-idx="${i}"]::-webkit-slider-thumb{background:${color};box-shadow:0 0 7px ${color}77}.etf-slider[data-idx="${i}"]{background:linear-gradient(90deg,${color} ${item.pct}%,var(--border) ${item.pct}%)}`;
+    document.head.appendChild(st);
+    const row=document.createElement('div');
+    row.className='etf-row'; row.dataset.idx=i;
+    row.innerHTML=`<div class="etf-row-top">
+      <div class="etf-color-swatch" style="background:${color}"></div>
+      <div class="etf-info"><div class="etf-ticker" style="color:${color}">${item.ticker}</div><div class="etf-cat-text">${etf.cat} · ${(etf.mu*100).toFixed(1)}%µ / ${(etf.sig*100).toFixed(0)}%σ</div></div>
+      <div class="etf-pct-wrap"><input class="etf-pct-input" type="number" min="0" max="100" value="${item.pct}" data-idx="${i}"><span class="etf-pct-sym">%</span></div>
+      <button class="etf-remove" data-idx="${i}" title="Remove">✕</button>
+    </div>
+    <input class="etf-slider" type="range" min="0" max="100" value="${item.pct}" data-idx="${i}">`;
+    list.appendChild(row);
+  });
+  updateAllocUI();
+}
+
+function updateAllocUI() {
+  const total=portfolio.reduce((s,x)=>s+Number(x.pct),0);
+  const valEl=document.getElementById('alloc-total-val');
+  const fill=document.getElementById('alloc-fill');
+  const stack=document.getElementById('alloc-stack');
+  valEl.textContent=total+'%';
+  valEl.className='val '+(total===100?'ok':total>100?'over':'under');
+  fill.style.width=Math.min(total,100)+'%';
+  fill.style.background=total===100?'var(--accent)':total>100?'var(--red)':'var(--gold)';
+  stack.innerHTML='';
+  portfolio.forEach((item,i)=>{
+    const seg=document.createElement('div');
+    seg.className='alloc-stack-seg'; seg.style.flex=item.pct; seg.style.background=colorFor(i); stack.appendChild(seg);
+  });
+  const rem=document.createElement('div');
+  rem.className='alloc-stack-seg'; rem.style.flex=Math.max(0,100-total); rem.style.background='var(--border)'; stack.appendChild(rem);
+  document.getElementById('warn-banner').classList.toggle('visible',total!==100&&portfolio.length>0);
+
+  const legend=document.getElementById('legend');
+  legend.innerHTML=portfolio.map((item,i)=>`<div class="legend-item"><div class="legend-dot" style="background:${colorFor(i)}"></div>${item.ticker} ${item.pct}%</div>`).join('')+
+    `<div class="legend-item"><div class="legend-dot" style="background:var(--accent2)"></div>Median</div>`;
+}
+
+document.getElementById('portfolio-list').addEventListener('input',e=>{
+  const idx=parseInt(e.target.dataset.idx,10); if(isNaN(idx))return;
+  const val=Math.max(0,Math.min(100,Math.round(parseFloat(e.target.value)||0)));
+  portfolio[idx].pct=val;
+  const row=document.querySelector(`.etf-row[data-idx="${idx}"]`);
+  if(row){
+    row.querySelector('.etf-pct-input').value=val;
+    const sli=row.querySelector('.etf-slider'); sli.value=val;
+    const st=document.querySelector(`style[data-etf-style="${idx}"]`);
+    const c=colorFor(idx);
+    if(st) st.textContent=`.etf-slider[data-idx="${idx}"]::-webkit-slider-thumb{background:${c};box-shadow:0 0 7px ${c}77}.etf-slider[data-idx="${idx}"]{background:linear-gradient(90deg,${c} ${val}%,var(--border) ${val}%)}`;
+  }
+  updateAllocUI(); scheduleSimulation();
+});
+document.getElementById('portfolio-list').addEventListener('click',e=>{
+  const btn=e.target.closest('.etf-remove'); if(!btn)return;
+  portfolio.splice(parseInt(btn.dataset.idx,10),1); renderPortfolioList(); scheduleSimulation();
+});
+
+// ══════════════════════════════════════════════════
+//  SEARCH
+// ══════════════════════════════════════════════════
+const searchInput=document.getElementById('etf-search');
+const searchDD=document.getElementById('search-dropdown');
+searchInput.addEventListener('input',()=>{
+  const q=searchInput.value.trim().toLowerCase(); if(!q){searchDD.classList.remove('open');return;}
+  const added=new Set(portfolio.map(p=>p.ticker));
+  const res=Object.entries(ETF_DB).filter(([t,d])=>t.toLowerCase().includes(q)||d.name.toLowerCase().includes(q)||d.cat.toLowerCase().includes(q)).slice(0,13);
+  if(!res.length){searchDD.classList.remove('open');return;}
+  searchDD.innerHTML=res.map(([t,d])=>`<div class="dropdown-item${added.has(t)?' already-added':''}" data-ticker="${t}"><span class="di-ticker">${t}</span><span class="di-name">${d.name}</span><span class="di-mu">${(d.mu*100).toFixed(1)}%µ</span></div>`).join('');
+  searchDD.classList.add('open');
+});
+searchDD.addEventListener('click',e=>{
+  const item=e.target.closest('.dropdown-item'); if(!item||item.classList.contains('already-added'))return;
+  const ticker=item.dataset.ticker;
+  const used=portfolio.reduce((s,x)=>s+x.pct,0);
+  portfolio.push({ticker,pct:Math.max(0,100-used)});
+  renderPortfolioList(); scheduleSimulation();
+  searchInput.value=''; searchDD.classList.remove('open');
+});
+document.addEventListener('click',e=>{if(!e.target.closest('.search-wrap'))searchDD.classList.remove('open');});
+
+// ══════════════════════════════════════════════════
+//  SETTINGS
+// ══════════════════════════════════════════════════
+document.getElementById('years-range').addEventListener('input',e=>{
+  years=+e.target.value;
+  document.getElementById('years-label').textContent=`${years} year${years>1?'s':''}`;
+  scheduleSimulation();
+});
+['initial-amount','monthly-amount'].forEach(id=>document.getElementById(id).addEventListener('input',scheduleSimulation));
+
+function scheduleSimulation(){clearTimeout(simTimer);simTimer=setTimeout(runSimulation,300);}
+
+// ══════════════════════════════════════════════════
+//  MATH
+// ══════════════════════════════════════════════════
+function boxMuller(){let u=0,v=0;while(!u)u=Math.random();while(!v)v=Math.random();return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);}
+
+function choleskyDecomp(n,tickers){
+  const L=Array.from({length:n},()=>new Float64Array(n));
+  for(let i=0;i<n;i++) for(let j=0;j<=i;j++){
+    let s=getCorr(tickers[i],tickers[j]);
+    for(let k=0;k<j;k++) s-=L[i][k]*L[j][k];
+    L[i][j]=(j===i)?Math.sqrt(Math.max(s,1e-10)):s/(L[j][j]||1e-10);
+  }
+  return L;
+}
+
+function portfolioStats(holdings){
+  const n=holdings.length,w=holdings.map(h=>h.pct/100);
+  const mu=holdings.reduce((s,h,i)=>s+w[i]*ETF_DB[h.ticker].mu,0);
+  let variance=0;
+  for(let i=0;i<n;i++) for(let j=0;j<n;j++)
+    variance+=w[i]*w[j]*getCorr(holdings[i].ticker,holdings[j].ticker)*ETF_DB[holdings[i].ticker].sig*ETF_DB[holdings[j].ticker].sig;
+  return{mu,sigma:Math.sqrt(Math.max(variance,0))};
+}
+
+// ══════════════════════════════════════════════════
+//  SIMULATION
+// ══════════════════════════════════════════════════
+function runSimulation(){
+  const total=portfolio.reduce((s,x)=>s+Number(x.pct),0);
+  if(total!==100||!portfolio.length) return;
+  const holdings=portfolio.map(p=>({...p,pct:Number(p.pct)})).filter(h=>ETF_DB[h.ticker]);
+  if(!holdings.length) return;
+
+  const initial=parseFloat(document.getElementById('initial-amount').value)||0;
+  const monthly=parseFloat(document.getElementById('monthly-amount').value)||0;
+  const {mu,sigma}=portfolioStats(holdings);
+
+  document.getElementById('loading-growth').classList.add('active');
+
+  setTimeout(()=>{
+    const n=holdings.length, weights=holdings.map(h=>h.pct/100);
+    const tickers=holdings.map(h=>h.ticker);
+    const mus12=holdings.map(h=>ETF_DB[h.ticker].mu/12);
+    const sigs12=holdings.map(h=>ETF_DB[h.ticker].sig/Math.sqrt(12));
+    const L=choleskyDecomp(n,tickers);
+
+    const paths=[], annualReturns=[], allMaxDrawdowns=[], allBestYears=[], allWorstYears=[];
+
+    for(let p=0;p<NUM_PATHS;p++){
+      let val=initial, peak=initial, maxDD=0;
+      const path=[val], yearReturns=[];
+      for(let y=0;y<years;y++){
+        let yearStart=val;
+        for(let m=0;m<12;m++){
+          const z=Array.from({length:n},boxMuller);
+          const corZ=z.map((_,i)=>{let s=0;for(let k=0;k<=i;k++)s+=L[i][k]*z[k];return s;});
+          const ret=corZ.reduce((s,cz,i)=>s+weights[i]*(mus12[i]+sigs12[i]*cz),0);
+          val=val*(1+ret)+monthly;
+          if(val>peak) peak=val;
+          const dd=(peak-val)/peak; if(dd>maxDD) maxDD=dd;
+        }
+        const annRet=(val-yearStart-monthly*12)/(yearStart||1);
+        yearReturns.push(annRet); annualReturns.push(annRet); path.push(val);
+      }
+      paths.push(path);
+      allMaxDrawdowns.push(maxDD);
+      allBestYears.push(Math.max(...yearReturns));
+      allWorstYears.push(Math.min(...yearReturns));
+    }
+
+    // Percentile bands
+    const bandPaths={p10:[],p25:[],p50:[],p75:[],p90:[]};
+    for(let y=0;y<=years;y++){
+      const sl=paths.map(p=>p[y]).sort((a,b)=>a-b);
+      bandPaths.p10.push(sl[Math.floor(NUM_PATHS*0.10)]);
+      bandPaths.p25.push(sl[Math.floor(NUM_PATHS*0.25)]);
+      bandPaths.p50.push(sl[Math.floor(NUM_PATHS*0.50)]);
+      bandPaths.p75.push(sl[Math.floor(NUM_PATHS*0.75)]);
+      bandPaths.p90.push(sl[Math.floor(NUM_PATHS*0.90)]);
+    }
+
+    // Risk stats (median path)
+    const sortedWorst=[...allWorstYears].sort((a,b)=>a-b);
+    const sortedBest=[...allBestYears].sort((a,b)=>b-a);
+    const sortedDD=[...allMaxDrawdowns].sort((a,b)=>b-a);
+    const worstYearPct=sortedWorst[Math.floor(NUM_PATHS*0.5)]; // median worst year
+    const bestYearPct=sortedBest[Math.floor(NUM_PATHS*0.5)];
+    const maxDD=sortedDD[Math.floor(NUM_PATHS*0.25)]; // p75 drawdown
+
+    const worstDollar=initial*worstYearPct;
+    const bestDollar=initial*bestYearPct;
+    const ddDollar=initial*(-maxDD);
+
+    // Stats
+    const p50Final=bandPaths.p50[years];
+    const sharpe=(mu-RISK_FREE)/(sigma||1);
+    document.getElementById('stat-return').textContent=(mu*100).toFixed(1)+'%';
+    document.getElementById('stat-vol').textContent=(sigma*100).toFixed(1)+'%';
+    document.getElementById('stat-final').textContent='$'+formatNum(p50Final);
+    document.getElementById('stat-sharpe').textContent=sharpe.toFixed(2);
+
+    // Risk callout
+    document.getElementById('rc-worst-pct').textContent=(worstYearPct*100).toFixed(1)+'%';
+    document.getElementById('rc-worst-dollar').textContent='≈ $'+formatNum(Math.abs(worstDollar))+' loss on $'+formatNum(initial);
+    document.getElementById('rc-drawdown').textContent='–'+(maxDD*100).toFixed(1)+'%';
+    document.getElementById('rc-drawdown-dollar').textContent='≈ $'+formatNum(Math.abs(ddDollar))+' from peak';
+    document.getElementById('rc-best-pct').textContent='+'+( bestYearPct*100).toFixed(1)+'%';
+    document.getElementById('rc-best-dollar').textContent='≈ +$'+formatNum(Math.abs(bestDollar))+' gain on $'+formatNum(initial);
+
+    const alloc=holdings.map(h=>`${h.pct}% ${h.ticker}`).join(' · ');
+    document.getElementById('chart-title').textContent=`${alloc} · ${years}yr Simulation`;
+
+    const labels=Array.from({length:years+1},(_,i)=>i===0?'Now':`Yr ${i}`);
+    drawGrowthChart(labels,paths,bandPaths);
+    updateRiskGauge(sigma);
+    drawRangeChart(sigma, holdings, initial);
+    drawWorstYearsTimeline(annualReturns, initial);
+
+    document.getElementById('loading-growth').classList.remove('active');
+  },30);
+}
+
+function formatNum(n){
+  const abs=Math.abs(n);
+  if(abs>=1e6) return (n/1e6).toFixed(2)+'M';
+  if(abs>=1e3) return (n/1e3).toFixed(1)+'K';
+  return n.toFixed(0);
+}
+function formatDollar(n){return(n<0?'–$':'$')+formatNum(Math.abs(n));}
+
+// ══════════════════════════════════════════════════
+//  GROWTH CHART
+// ══════════════════════════════════════════════════
+function killChart(k){if(charts[k]){charts[k].destroy();delete charts[k];}}
+const BASE={
+  plugins:{legend:{display:false},tooltip:{enabled:true}},
+  scales:{
+    x:{grid:{color:'#1a1f2e'},ticks:{color:'#6b7280',font:{family:'DM Mono',size:9}}},
+    y:{grid:{color:'#1a1f2e'},ticks:{color:'#6b7280',font:{family:'DM Mono',size:9}}},
+  },
+  animation:{duration:450,easing:'easeOutCubic'},
+};
+
+function drawGrowthChart(labels,paths,bp){
+  killChart('growth');
+  const ctx=document.getElementById('growth-chart').getContext('2d');
+  const faint=paths.slice(0,40).map(p=>({data:p,borderColor:'rgba(200,245,66,0.04)',borderWidth:1,pointRadius:0,fill:false,tension:0.35}));
+  charts.growth=new Chart(ctx,{
+    type:'line',
+    data:{labels,datasets:[
+      ...faint,
+      {label:'Band',data:bp.p75,borderColor:'transparent',borderWidth:0,pointRadius:0,fill:'+1',tension:0.4,backgroundColor:'rgba(200,245,66,0.07)'},
+      {label:'BandFloor',data:bp.p25,borderColor:'transparent',borderWidth:0,pointRadius:0,fill:false,tension:0.4},
+      {label:'P10',data:bp.p10,borderColor:'rgba(255,77,77,0.55)',borderWidth:1.5,pointRadius:0,fill:false,tension:0.4,borderDash:[4,3]},
+      {label:'Median',data:bp.p50,borderColor:'#c8f542',borderWidth:2.5,pointRadius:0,fill:false,tension:0.4},
+      {label:'P90',data:bp.p90,borderColor:'rgba(74,158,255,0.6)',borderWidth:1.5,pointRadius:0,fill:false,tension:0.4,borderDash:[4,3]},
+    ]},
+    options:{...BASE,maintainAspectRatio:false,
+      plugins:{legend:{display:true,labels:{color:'#6b7280',font:{family:'DM Mono',size:9},boxWidth:10,padding:8,filter:i=>['P10','Median','P90'].includes(i.text)}},
+        tooltip:{filter:i=>['P10','Median','P90'].includes(i.dataset.label),callbacks:{label:c=>`${c.dataset.label}: $${formatNum(c.parsed.y)}`}}},
+      scales:{...BASE.scales,y:{...BASE.scales.y,ticks:{...BASE.scales.y.ticks,callback:v=>'$'+formatNum(v)}}}
+    }
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  RISK GAUGE
+// ══════════════════════════════════════════════════
+function updateRiskGauge(sigma){
+  // sigma 0→0.50+ maps to 0→1 on gauge
+  const t=Math.min(sigma/0.35,1.0);
+  const angle=-90+t*180; // -90 (left) to +90 (right)
+  const needle=document.getElementById('gauge-needle');
+  needle.style.transform=`rotate(${angle}deg)`;
+
+  // Arc fill
+  const arcLen=266.9;
+  document.getElementById('gauge-arc').style.strokeDashoffset=arcLen*(1-t);
+
+  const labels=['Very Conservative','Conservative','Moderate','Moderately Aggressive','Aggressive','Very Aggressive'];
+  const idx=Math.min(Math.floor(t*labels.length),labels.length-1);
+  const colors=['#1ea887','#5fba80','#f0a742','#f07030','#ff4d20','#ff2020'];
+  document.getElementById('risk-label').textContent=labels[idx];
+  document.getElementById('risk-label').style.color=colors[idx];
+  document.getElementById('risk-sublabel').textContent=`Portfolio σ: ${(sigma*100).toFixed(1)}% annually`;
+}
+
+// ══════════════════════════════════════════════════
+//  RANGE OF RETURNS (Vanguard-style)
+// ══════════════════════════════════════════════════
+function drawRangeChart(portfolioSigma, holdings, initial){
+  // Generate 11 mixes from 100% bonds → 100% stocks
+  // Find the pure bond and pure equity equivalent from current portfolio
+  const equityW=holdings.reduce((s,h)=>s+(['bond','gold','reit'].includes(assetClass(h.ticker))?0:h.pct/100),0);
+  
+  // 11 columns: 0% stocks (100% bonds) → 100% stocks
+  const bondMu=0.035,bondSig=0.045, stockMu=0.090,stockSig=0.160, rho=-0.10;
+  const columns=[];
+  for(let si=0;si<=10;si++){
+    const sw=si/10, bw=1-sw;
+    const mu=sw*stockMu+bw*bondMu;
+    const sig=Math.sqrt(sw*sw*stockSig*stockSig+bw*bw*bondSig*bondSig+2*sw*bw*rho*stockSig*bondSig);
+    // Approximate best/worst/avg from historical z-scores (matches Vanguard chart)
+    const bestYear=mu+2.15*sig;   // ~97.5th pct annual
+    const worstYear=mu-2.15*sig;  // ~2.5th pct annual
+    columns.push({
+      sw,bw,mu,sig,
+      best:Math.round(bestYear*1000)/10,
+      worst:Math.round(worstYear*1000)/10,
+      avg:Math.round(mu*1000)/10,
+      label:si===0?'100%\nbonds':si===10?'100%\nstocks':`${Math.round(bw*100)}%/\n${Math.round(sw*100)}%`,
+      isCurrent:Math.abs(sw-equityW)<0.08,
+    });
+  }
+
+  const maxGain=Math.max(...columns.map(c=>c.best));
+  const maxLoss=Math.abs(Math.min(...columns.map(c=>c.worst)));
+  const totalRange=maxGain+maxLoss;
+
+  const wrap=document.getElementById('range-chart-wrap');
+  const wrapH=wrap.clientHeight||230;
+  const barsH=wrapH-24; // subtract x-label space
+  const gainZone=barsH*(maxGain/totalRange);
+  const lossZone=barsH*(maxLoss/totalRange);
+
+  // Position zero line
+  document.getElementById('range-zero-line').style.top=(gainZone)+'px';
+
+  // Y-axis ticks
+  const yAxis=document.getElementById('range-y-axis');
+  yAxis.innerHTML='';
+  const ticks=[maxGain,maxGain/2,0,-maxLoss/2,-maxLoss];
+  ticks.forEach(t=>{
+    const div=document.createElement('div');
+    div.className='range-y-tick';
+    div.style.position='absolute';
+    const frac=(maxGain-t)/totalRange;
+    div.style.top=(frac*barsH-8)+'px';
+    div.textContent=(t>=0?'+':'')+t.toFixed(0)+'%';
+    yAxis.appendChild(div);
+  });
+
+  const barsEl=document.getElementById('range-bars');
+  barsEl.innerHTML='';
+  document.getElementById('range-subtitle').textContent=`Your portfolio ≈ ${Math.round(equityW*100)}% equity`;
+
+  columns.forEach(col=>{
+    const gainH=Math.max(2, barsH*(col.best/totalRange));
+    const lossH=Math.max(2, barsH*(Math.abs(col.worst)/totalRange));
+    const avgTop=gainZone;  // zero line position
+    const avgOffset=barsH*(col.avg/totalRange); // positive = above zero
+
+    const colDiv=document.createElement('div');
+    colDiv.className='range-bar-col'+(col.isCurrent?' current-col':'');
+    colDiv.style.paddingTop=(barsH*(maxGain/totalRange)-gainH)+'px'; // align tops
+
+    colDiv.innerHTML=`<div class="rbc-inner" style="height:${gainH+lossH}px;position:relative">
+      <div class="rbc-gain" style="height:${gainH}px"><span>${col.best>0?'+':''}${col.best.toFixed(1)}%</span></div>
+      <div class="rbc-avg" style="position:absolute;top:${gainH}px;left:50%;transform:translate(-50%,-50%)" title="Avg: ${col.avg}%"></div>
+      <div class="rbc-loss" style="height:${lossH}px"><span>${col.worst.toFixed(1)}%</span></div>
+    </div>
+    <div class="rbc-label">${col.label.replace('\n','<br>')}</div>`;
+
+    barsEl.appendChild(colDiv);
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  WORST YEARS TIMELINE
+// ══════════════════════════════════════════════════
+function drawWorstYearsTimeline(annualReturns, initial){
+  // Get worst 6 simulated annual returns
+  const sorted=[...annualReturns].sort((a,b)=>a-b);
+  const worstReturns=sorted.slice(0,6);
+  const bestReturn=sorted[sorted.length-1];
+  const maxAbs=Math.max(Math.abs(worstReturns[0]), Math.abs(bestReturn));
+
+  const container=document.getElementById('worst-timeline');
+  container.innerHTML='';
+  document.getElementById('wt-initial-note').textContent='$'+formatNum(initial);
+
+  // Label worst years
+  const scenarios=[
+    {label:'Worst case',ret:worstReturns[0]},
+    {label:'2nd worst',ret:worstReturns[1]},
+    {label:'3rd worst',ret:worstReturns[2]},
+    {label:'4th worst',ret:worstReturns[3]},
+    {label:'5th worst',ret:worstReturns[4]},
+    {label:'Best case',ret:bestReturn},
+  ];
+
+  scenarios.forEach(sc=>{
+    const isGain=sc.ret>0;
+    const barPct=(Math.abs(sc.ret)/maxAbs)*100;
+    const dollarVal=initial*sc.ret;
+    const row=document.createElement('div');
+    row.className='wt-row';
+    row.innerHTML=`
+      <div class="wt-year">${sc.label}</div>
+      <div class="wt-bar-wrap">
+        <div class="wt-bar" style="width:${barPct}%;background:${isGain?'var(--accent)':'var(--red)'}">
+          <span class="wt-bar-pct">${isGain?'+':''}${(sc.ret*100).toFixed(1)}%</span>
+        </div>
+      </div>
+      <div class="wt-dollar" style="color:${isGain?'var(--accent)':'var(--red)'}">${isGain?'+':''} ${formatDollar(dollarVal)}</div>
+    `;
+    container.appendChild(row);
+  });
+}
+
+// ══════════════════════════════════════════════════
+//  INIT
+// ══════════════════════════════════════════════════
+renderPortfolioList();
+runSimulation();
+</script>
+</body>
+</html>

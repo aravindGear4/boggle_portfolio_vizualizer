@@ -20,8 +20,11 @@ This is good. I want to make fewimprovements:
 ## TODO:
 By this I want to emphasis, how much risk investors are taking and how much risk tolerant they are.
 So I want to emphasis the losses clearly both by percent and by value. Example in year X your portfolio was down y% and $Z in dollar value
+This should be hightlighted in graphically refer the attached picture from https://investor.vanguard.com/investor-resources-education/education/model-portfolio-allocation
 
 # AI
 Claude:
 https://claude.ai/chat/62fa5e82-092e-4b88-b5ba-a9b4ee002ca9
 
+# Link
+https://aravindgear4.github.io/boggle_portfolio_vizualizer/
